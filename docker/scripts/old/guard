@@ -1,0 +1,1 @@
+docker-compose run --rm -e RAILS_ENV=development -e RACK_ENV=development api guard

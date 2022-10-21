@@ -1,0 +1,342 @@
+version: "3.9"
+
+x-production-env: &rails-production-env
+  env_file:
+    - .env
+  environment:
+    - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@rails-production-db
+    - RACK_ENV=production
+    - RAILS_ENV=production
+    - RAILS_LOG_TO_STDOUT=enabled
+    - REDIS_URL=redis://rails-production-redis-actioncable:6379/1
+    - SECRET_KEY_BASE
+    - VIRTUAL_HOST
+
+x-rails-server-src: &rails-server-src
+  volumes:
+    - ./src/server:/usr/local/app/src/server
+  working_dir: /usr/local/app/src/server
+
+x-javascript-client-src: &javascript-client-src
+  volumes:
+    - ./src/client:/usr/local/app/src/client
+  working_dir: /usr/local/app/src/client
+
+x-redis: &redis-base
+  image: redis:7.0.5-alpine3.16
+  command: redis-server
+  restart: always
+
+x-base-development-image: &base-development-image
+  user: "1000:1000"
+  image: jasonben/ide:latest
+
+x-rails-production-image: &rails-production-image
+  user: "1000:1000"
+  build:
+    context: .
+    dockerfile: Dockerfile
+
+x-rails-production-run: &rails-production-run
+  <<: *rails-production-image
+  <<: *rails-production-env
+  working_dir: /usr/local/app/src/server
+
+services:
+  rails-production-server:
+    profiles:
+      - rails-production
+    <<: *rails-production-run
+    restart: always
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-rails-production-server.entrypoints=https"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-rails-production-server.tls=true"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-rails-production-server.rule=Host(`api-${VIRTUAL_HOST}`)"
+      - "traefik.http.services.${COMPOSE_PROJECT_NAME}-rails-production-server.loadbalancer.server.port=${VIRTUAL_PORT}"
+    networks:
+      - public-web
+      - rails-production
+    depends_on:
+      - rails-production-db
+      # - rails-production-redis-actioncable
+    volumes:
+      - rails-production-ruby-gems:/usr/local/bundle
+      - rails-production-ruby-public-assets:/usr/local/app/src/server/public/assets
+    command: bundle exec puma -C config/puma.rb -p ${VIRTUAL_PORT} -b tcp://0.0.0.0
+
+  rails-production-db:
+    profiles:
+      - rails-production
+    image: postgres:14.4-alpine3.16
+    restart: always
+    networks:
+      - rails-production
+    volumes:
+      - rails-production-db-data:/var/lib/postgresql/data
+    env_file:
+      - .env
+    environment:
+      PG_DATA: /var/lib/postgresql/data
+
+  rails-production-sidekiq:
+    profiles:
+      - rails-production
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - rails-production-redis-sidekiq
+    env_file:
+      - .env
+    environment:
+      - VIRTUAL_HOST
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@rails-production-db
+      - REDIS_URL=redis://rails-production-redis-sidekiq:6379/1
+      - REDIS_PROVIDER=REDIS_URL
+      - RAILS_ENV=production
+      - RACK_ENV=production
+      - RAILS_LOG_TO_STDOUT=enabled
+      - BUNDLE_MIRROR__HTTPS://RUBYGEMS__ORG/=${GEMSTASH_URL}
+      - BUNDLE_MIRROR__HTTPS://RUBYGEMS__ORG/__FALLBACK_TIMEOUT="10"
+    restart: always
+    networks:
+      - rails-production
+    volumes:
+      - rails-production-ruby-gems:/usr/local/bundle
+    working_dir: /usr/local/app/src/server
+    command: sh -c "bundle exec sidekiq"
+
+  rails-production-redis-actioncable:
+    profiles:
+      - rails-production
+    <<: *redis-base
+    networks:
+      - rails-production
+
+  rails-production-redis-sidekiq:
+    profiles:
+      - rails-production
+    <<: *redis-base
+    networks:
+      - rails-production
+
+  html-server:
+    profiles:
+      - html-server
+    restart: always
+    image: nginx:1.23.1-alpine
+    networks:
+      - public-web
+    volumes:
+      - ./docker/config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./src/client/build:/public:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-nginx.entrypoints=https"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-nginx.tls=true"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-nginx.rule=Host(`${VIRTUAL_HOST}`)"
+      - "traefik.http.services.${COMPOSE_PROJECT_NAME}-nginx.loadbalancer.server.port=80"
+    command: /bin/sh -c "exec nginx -g 'daemon off;'"
+
+  rails-development-server:
+    profiles:
+      - rails-development
+    <<: *base-development-image
+    volumes:
+      - ./src/server:/usr/local/app/src/server
+      - rails-development-ruby-gems:/usr/local/bundle
+    depends_on:
+      - rails-development-db
+      - rails-development-redis-actioncable
+    env_file:
+      - .env
+    environment:
+      - VIRTUAL_HOST
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@rails-development-db
+      - REDIS_URL=redis://rails-development-redis:6379/1
+      - RAILS_ENV=development
+      - RACK_ENV=development
+      - RAILS_LOG_TO_STDOUT=enabled
+      - BUNDLE_MIRROR__HTTPS://RUBYGEMS__ORG/=${GEMSTASH_URL}
+      - BUNDLE_MIRROR__HTTPS://RUBYGEMS__ORG/__FALLBACK_TIMEOUT="10"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-rails-development-server.entrypoints=https"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-rails-development-server.tls=true"
+      - "traefik.http.services.${COMPOSE_PROJECT_NAME}-rails-development-server.loadbalancer.server.port=${VIRTUAL_PORT:-3000}"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-rails-development-server.rule=Host(`dev-api-${VIRTUAL_HOST}`)"
+    networks:
+      - public-web
+      - rails-development
+    working_dir: /usr/local/app/src/server
+    command: bundle exec puma -C config/puma.rb -p ${VIRTUAL_PORT:-3000} -b tcp://0.0.0.0
+
+  rails-development-db: &rails-development-db
+    profiles:
+      - rails-development
+    image: postgres:14.4-alpine3.16
+    networks:
+      - rails-development
+    volumes:
+      - rails-development-db-data:/var/lib/postgresql/data
+    env_file:
+      - .env
+    environment:
+      PG_DATA: /var/lib/postgresql/data
+
+  rails-test-db:
+    profiles:
+      - rails-development
+    <<: *rails-development-db
+    volumes:
+      - rails-test-db-data:/var/lib/postgresql/data
+
+  rails-development-sidekiq:
+    profiles:
+      - rails-development
+    <<: *base-development-image
+    depends_on:
+      - rails-development-db
+      - rails-development-redis-sidekiq
+    networks:
+      - rails-development
+    command: ["bundle", "exec", "sidekiq"]
+
+  rails-development-redis-actioncable:
+    profiles:
+      - rails-development
+    <<: *redis-base
+    networks:
+      - rails-development
+
+  rails-development-redis-sidekiq:
+    profiles:
+      - rails-development
+    <<: *redis-base
+    networks:
+      - rails-development
+
+  javascript-development-server:
+    profiles:
+      - javascript-development
+    <<: *base-development-image
+    <<: *javascript-client-src
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-javascript-development-server.entrypoints=https"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-javascript-development-server.tls=true"
+      - "traefik.http.services.${COMPOSE_PROJECT_NAME}-javascript-development-server.loadbalancer.server.port=${VIRTUAL_PORT}"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-javascript-development-server.rule=Host(`dev-${VIRTUAL_HOST}`)"
+    networks:
+      - public-web
+    environment:
+      - HOST=0.0.0.0
+      - PORT=${VIRTUAL_PORT}
+      - REACT_APP_API_URL=https://dev-api-${VIRTUAL_HOST}
+      - WDS_SOCKET_PORT=443
+    command: yarn start
+
+  yarn:
+    <<: *base-development-image
+    <<: *javascript-client-src
+    profiles:
+      - dev
+    entrypoint:
+      - yarn
+
+  create-rails-app:
+    <<: *base-development-image
+    <<: *rails-server-src
+    tty: true
+    profiles:
+      - init
+    command: sh -c "gem install rails && rails new -d postgresql --skip-git --skip-bundle ."
+
+  jumpstart-rails:
+    <<: *base-development-image
+    <<: *rails-server-src
+    tty: true
+    environment:
+      - SKIP_GIT=1
+    profiles:
+      - jumpstart-rails
+    command: sh -c "gem install rails && rails new . -d postgresql -m https://raw.githubusercontent.com/excid3/jumpstart/master/template.rb"
+
+  create-react-app:
+    <<: *base-development-image
+    <<: *javascript-client-src
+    tty: true
+    profiles:
+      - init
+    command: sh -c "rm -rf .keep && npx --yes create-react-app ."
+
+  build-react-app:
+    <<: *base-development-image
+    <<: *javascript-client-src
+    profiles:
+      - dev
+    environment:
+      - REACT_APP_API_URL=https://api-${VIRTUAL_HOST}
+    command: yarn run build
+
+  ide: &ide
+    profiles:
+      - ide
+    <<: *base-development-image
+    depends_on:
+      - rails-development-db
+      - rails-test-db
+    environment:
+      - DOCKER_HOST=tcp://dockersock:2375
+      - VIRTUAL_HOST
+      - WORKING_DIR
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@rails-development-db
+      - RAILS_ENV=development
+    networks:
+      - rails-development
+      - dockersock
+    volumes:
+      - rails-development-ruby-gems:/usr/local/bundle
+      - solargraph-cache:/home/${IDE_USER}/.solargraph/cache
+      - /home/${IDE_USER}/.ssh:/home/${IDE_USER}/.ssh
+      - /home/${IDE_USER}/.gitconfig:/home/${IDE_USER}/.gitconfig
+      - /home/${IDE_USER}/.vimrc_background:/home/${IDE_USER}/.vimrc_background
+      - /home/${IDE_USER}/.zsh_history:/home/${IDE_USER}/.zsh_history
+      - /home/${IDE_USER}/.zsh_history.new:/home/${IDE_USER}/.zsh_history.new
+      - ${WORKING_DIR}:${WORKING_DIR}
+    working_dir: ${WORKING_DIR}
+    tty: true
+    command: tmux new-session -A -s ide
+
+  rails-production-assets-precompile:
+    profiles:
+      - rails-production
+    <<: *rails-production-run
+    networks:
+      - rails-production
+    volumes:
+      - rails-production-ruby-gems:/usr/local/bundle
+      - rails-production-ruby-public-assets:/usr/local/app/src/server/public/assets
+    user: "root"
+    command: sh -c "chown -R ${IDE_USER}:${IDE_USER} /usr/local/app/src/server/public/assets && rails assets:precompile"
+
+volumes:
+  rails-development-ruby-gems:
+  rails-production-ruby-gems:
+  rails-production-ruby-public-assets:
+  rails-development-db-data:
+  rails-test-db-data:
+  rails-production-db-data:
+  solargraph-cache:
+    external: true
+
+networks:
+  dockersock:
+    external: true
+  public-web:
+    name: webproxy
+  rails-production:
+    internal: true
+  rails-development:
+    internal: true

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+
+set -e
+
+# Containers
+docker-compose build
+
+# Ruby gems
+./bundle install
+
+# Node packages
+./ide run --rm yarn install
+./ide run --rm build-prod-client
+
+# remove leftovers
+rm -rf client_side_app/node_modules
+rm -rf client_side_app/package.json
+rm -rf client_side_app/yarn.lock
+
+docker-compose up -d --force-recreate --remove-orphans
+
+# ./rails db:create

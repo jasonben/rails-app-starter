@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+set -e
+
+rails_prod="docker-compose --profile rails-production"
+d="$rails_prod run --rm rails-production-server"
+WORKING_DIR=$PWD $rails_prod build
+WORKING_DIR=$PWD $d bundle install
+WORKING_DIR=$PWD $rails_prod run --rm rails-production-assets-precompile
+WORKING_DIR=$PWD $d rails db:create
+WORKING_DIR=$PWD $d rails db:migrate
+WORKING_DIR=$PWD $rails_prod up -d

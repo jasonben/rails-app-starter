@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+set -e
+
+docker-compose -f docker-compose.yml -f docker-compose.ide.yml run --rm dev-api ruby "$@"

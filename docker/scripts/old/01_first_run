@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+
+set -e
+
+cp .env.example .env
+
+# Build the containers
+./ide build
+
+# Create a new rails app
+./rails-new
+
+# Create a new ReactJS app
+./create-react-app
+
+# Delete the cp .env.example .env line after first run
+sed -i '/example/d' ./01_first_run

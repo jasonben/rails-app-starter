@@ -1,0 +1,62 @@
+#!/usr/bin/env zsh
+
+set -e
+
+./bundle install
+rm -rf ./railsapp/Gemfile.lock
+
+./rails new -f \
+	--database=postgresql \
+	--skip-bundle \
+	--skip-git \
+	--skip-javascript \
+	--skip-test \
+	--skip-system-test \
+	--api .
+
+# Delete the tzinfo line
+sed -i '/tzinfo/d' ./railsapp/Gemfile
+
+# Gems used with prettier/ruby
+cat <<'GEMFILE' >>./railsapp/Gemfile
+gem "tzinfo-data"
+gem "rack-cors"
+
+group "development" do
+  gem 'pry-rails'
+
+  # Used with ALEFix
+  gem 'solargraph'
+  gem 'prettier_print'
+  gem 'syntax_tree'
+  gem 'syntax_tree-haml'
+  gem 'syntax_tree-rbs'
+  gem 'standard'
+end
+GEMFILE
+
+# Rack cors configuration
+dev_rb=./railsapp/config/environments/development.rb
+# Deletes the last line so we are inside the block
+sed -i '/^end/d' $dev_rb
+
+cat <<'CORS' >> $dev_rb
+  config.hosts << /.*#{ENV['VIRTUAL_HOST']}/i
+  config.middleware.insert_before ActionDispatch::Static, Rack::Cors do
+    allow do
+      origins [ENV['VIRTUAL_HOST'], "dev-#{ENV['VIRTUAL_HOST']}"]
+      resource '*', :headers => :any, :methods => [:get, :post, :options]
+    end
+  end
+end
+CORS
+
+prod_rb=./railsapp/config/environments/production.rb
+# Deletes the last line so we are inside the block
+sed -i '/^end/d' $prod_rb
+cat <<'HOSTAUTH' >> $prod_rb
+  config.hosts << /.*#{ENV['VIRTUAL_HOST']}/i
+end
+HOSTAUTH
+
+./bundle install

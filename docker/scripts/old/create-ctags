@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+set -e
+
+./ide run --rm -w /app dev-api \
+	ctags -R \
+	--languages=ruby \
+	--exclude=.git \
+	--exclude=log \
+	--exclude=tmp . $(bundle list --paths)

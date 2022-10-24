@@ -26,16 +26,20 @@ x-redis: &redis-base
   image: redis:7.0.5-alpine3.16
   command: redis-server
   restart: always
+  platform: linux/arm64/v8
 
 x-base-development-image: &base-development-image
   user: "1000:1000"
   image: jasonben/ide:latest
+  platform: linux/arm64/v8
 
 x-rails-production-image: &rails-production-image
   user: "1000:1000"
   build:
     context: .
     dockerfile: Dockerfile
+  platform: linux/arm64/v8
+
 
 x-rails-production-run: &rails-production-run
   <<: *rails-production-image
@@ -78,6 +82,7 @@ services:
       - .env
     environment:
       PG_DATA: /var/lib/postgresql/data
+    platform: linux/arm64/v8
 
   rails-production-sidekiq:
     profiles:
@@ -106,6 +111,7 @@ services:
       - rails-production-ruby-gems:/usr/local/bundle
     working_dir: /usr/local/app/src/server
     command: sh -c "bundle exec sidekiq"
+    platform: linux/arm64/v8
 
   rails-production-redis-actioncable:
     profiles:
@@ -138,6 +144,7 @@ services:
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-nginx.rule=Host(`${VIRTUAL_HOST}`)"
       - "traefik.http.services.${COMPOSE_PROJECT_NAME}-nginx.loadbalancer.server.port=80"
     command: /bin/sh -c "exec nginx -g 'daemon off;'"
+    platform: linux/arm64/v8
 
   rails-development-server:
     profiles:
@@ -184,6 +191,7 @@ services:
       - .env
     environment:
       PG_DATA: /var/lib/postgresql/data
+    platform: linux/arm64/v8
 
   rails-test-db:
     profiles:
@@ -191,6 +199,7 @@ services:
     <<: *rails-development-db
     volumes:
       - rails-test-db-data:/var/lib/postgresql/data
+    platform: linux/arm64/v8
 
   rails-development-sidekiq:
     profiles:

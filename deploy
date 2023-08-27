@@ -2,7 +2,7 @@
 
 set -e
 
-rails_prod="docker-compose --profile rails-production"
+rails_prod="docker compose --profile rails-production"
 d="$rails_prod run --rm rails-production-server"
 WORKING_DIR=$PWD $rails_prod build
 WORKING_DIR=$PWD $d bundle install

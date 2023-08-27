@@ -313,6 +313,8 @@ services:
 
 volumes:
   src:
+    external: true
+    name: rails-app-starter
   rails-production-ruby-public-assets:
   rails-development-db-data:
   rails-test-db-data:

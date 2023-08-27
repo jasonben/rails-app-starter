@@ -137,7 +137,7 @@ services:
     <<: *base-development-image
     volumes:
       - jasonben_ide_bundle:/jasonben/ide/bundle
-      - src:/jasonben/ide/src
+      - src:/jasonben/ide/code/src
     depends_on:
       - rails-development-db
       - rails-development-redis-actioncable
@@ -145,6 +145,7 @@ services:
       - .env
     environment:
       - VIRTUAL_HOST
+      - VIRTUAL_PORT
       - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@rails-development-db
       - REDIS_URL=redis://rails-development-redis:6379/1
       - RAILS_ENV=development
@@ -160,7 +161,7 @@ services:
       - public-web
       - rails-development
     working_dir: /jasonben/ide/code/src/server
-    command: bundle exec puma -C config/puma.rb -p ${VIRTUAL_PORT:-3000} -b tcp://0.0.0.0
+    command: "bundle exec puma -C config/puma.rb -p ${VIRTUAL_PORT} -b tcp://0.0.0.0"
 
   rails-development-db: &rails-development-db
     profiles:
@@ -312,8 +313,6 @@ services:
 
 volumes:
   src:
-    name: rails-app-starter
-    external: true
   rails-production-ruby-public-assets:
   rails-development-db-data:
   rails-test-db-data:

@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 
-set -e
-
 COMPOSE_PROFILES=ide docker compose build --no-cache
-COMPOSE_PROFILES=ide docker compose up -d
 COMPOSE_PROFILES=ide docker compose run -it --rm ide bundle install
 COMPOSE_PROFILES=ide docker compose run -it --rm ide bundle exec rails db:create
 COMPOSE_PROFILES=ide docker compose run -it --rm ide bundle exec rails db:migrate
+COMPOSE_PROFILES=rails-development docker compose up -d
 COMPOSE_PROFILES=ide docker compose run -it --rm ide

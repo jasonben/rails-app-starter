@@ -117,7 +117,7 @@ services:
     networks:
       - rails-production
 
-  html-server:
+  html-production-server:
     profiles:
       - rails-production
     restart: always

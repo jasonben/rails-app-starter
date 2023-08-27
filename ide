@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
 
-WORKING_DIR=$PWD COMPOSE_PROFILES=ide,rails-development docker compose run --rm ide
+COMPOSE_PROFILES=rails-development docker compose up -d
+COMPOSE_PROFILES=ide,rails-development docker compose run --rm ide

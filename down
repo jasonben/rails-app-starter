@@ -3,3 +3,4 @@
 set -e
 
 docker compose --profile rails-production down
+docker compose --profile rails-development down

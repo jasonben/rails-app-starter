@@ -2,11 +2,23 @@
 
 set -e
 
-rails_prod="docker compose --profile rails-production"
-d="$rails_prod run --rm rails-production-server"
-WORKING_DIR=$PWD $rails_prod build
-WORKING_DIR=$PWD $d bundle install
-WORKING_DIR=$PWD $rails_prod run --rm rails-production-assets-precompile
-WORKING_DIR=$PWD $d rails db:create
-WORKING_DIR=$PWD $d rails db:migrate
-WORKING_DIR=$PWD $rails_prod up -d
+rails-app-starter() {
+  run="run --rm --remove-orphans"
+  rails_prod_profile="docker compose --profile rails-production"
+  rails="$rails_prod_profile $run rails-production-server"
+
+  # Build the containers
+  $rails_prod_profile build
+  # Install gems
+  $rails bundle install
+  # Precompile assets
+  $rails_prod_profile $run rails-production-assets-precompile
+  # Create the database
+  $rails rails db:create
+  # Migrate the database
+  $rails rails db:migrate
+  # Start the production server
+  $rails_prod_profile up -d
+}
+
+rails-app-starter

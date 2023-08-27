@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 
-set -e
+down() {
+  dc="docker compose --profile"
+  $dc rails-production down
+  $dc rails-development down
+  $dc ide down
+}
 
-docker compose --profile rails-production down
-docker compose --profile rails-development down
+down 2>/dev/null

@@ -2,23 +2,19 @@
 
 set -e
 
-rails-app-starter() {
-  run="run --rm --remove-orphans"
-  rails_prod_profile="docker compose --profile rails-production"
-  rails="$rails_prod_profile $run rails-production-server"
+dcp="docker compose --profile"
+run="run -it --rm"
+production="$dcp rails-production"
+runner="$production $run rails-production-server"
 
-  # Build the containers
-  $rails_prod_profile build
-  # Install gems
-  $rails bundle install
-  # Precompile assets
-  $rails_prod_profile $run rails-production-assets-precompile
-  # Create the database
-  $rails rails db:create
-  # Migrate the database
-  $rails rails db:migrate
-  # Start the production server
-  $rails_prod_profile up -d
-}
-
-rails-app-starter
+echo "# Build the containers"
+$production build
+echo "# Install gems"
+#$runner gem install "bundler:2.4.19"
+$runner bundle install
+echo "# Create the database"
+$runner rails db:create
+echo "# Migrate the database"
+$runner rails db:migrate
+echo "# Start the project"
+$production up -d

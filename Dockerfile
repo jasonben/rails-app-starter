@@ -1,9 +1,11 @@
 FROM ruby:alpine3.18
 
 ARG APP_USER=ide
-ARG APP_SRC=/usr/local/app/src
+ARG APP_SRC=/jasonben/ide/code/src
+ARG BUNDLE=/jasonben/ide/bundle
 
-ENV GEM_HOME /usr/local/bundle
+RUN mkdir -p ${BUNDLE}
+ENV GEM_HOME ${BUNDLE}
 ENV PATH $GEM_HOME/bin:$PATH
 ENV BUNDLE_PATH $GEM_HOME
 ENV BUNDLE_BIN $BUNDLE_PATH/bin
@@ -16,17 +18,13 @@ RUN apk add --no-cache postgresql-client postgresql-dev libpq build-base sqlite-
 RUN \
   addgroup -g 1000 -S ${APP_USER} && \
   adduser -D -u 1000 -G ${APP_USER} -S ${APP_USER} && \
-  echo "${APP_USER}:password" | chpasswd
+  echo "${APP_USER}:password" | chpasswd && \
+  chown -R ${APP_USER}:${APP_USER} /jasonben/ide
 
 USER "${APP_USER}"
 
-# Rails
-COPY --chown=${APP_USER} src/server ${APP_SRC}/server
-COPY --chown=${APP_USER} src/server ${APP_SRC}/server
-
-# Static html/js
-COPY --chown=${APP_USER} src/client ${APP_SRC}/client
-COPY --chown=${APP_USER} src/client ${APP_SRC}/client
+# client and server source code
+COPY --chown=${APP_USER} src ${APP_SRC}
 
 # Nginx config for html/js
 COPY --chown=${APP_USER} docker/config/nginx/nginx.conf /etc/nginx/nginx.conf
@@ -39,9 +37,7 @@ RUN \
 # .bundle for Rails
 WORKDIR ${APP_SRC}/server
 RUN \
-  gem install bundler:2.4.19 && \
-  bundle update && \
-  bundle config set --local deployment 'true' && \
+  gem install bundler:2.4.18 && \
   bundle install
 
 RUN \

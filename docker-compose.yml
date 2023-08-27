@@ -12,13 +12,13 @@ x-production-env: &rails-production-env
 
 x-rails-server-src: &rails-server-src
   volumes:
-    - rails-app-src:/usr/local/app/src/server
-  working_dir: /usr/local/app/src/server
+    - src:/jasonben/ide/code/src
+  working_dir: /jasonben/ide/code/src/server
 
 x-javascript-client-src: &javascript-client-src
   volumes:
-    - javascript-client-src:/usr/local/app/src/client
-  working_dir: /usr/local/app/src/client
+    - src:/jasonben/ide/src
+  working_dir: /jasonben/ide/src/client
 
 x-redis: &redis-base
   image: redis:7.0.5-alpine3.16
@@ -38,7 +38,7 @@ x-rails-production-image: &rails-production-image
 
 x-rails-production-run: &rails-production-run
   <<: [*rails-production-image, *rails-production-env]
-  working_dir: /usr/local/app/src/server
+  working_dir: /jasonben/ide/code/src/server
 
 services:
   rails-production-server:
@@ -58,9 +58,11 @@ services:
     depends_on:
       - rails-production-db
       # - rails-production-redis-actioncable
+    working_dir: /jasonben/ide/code/src/server
     volumes:
-      - rails-production-ruby-gems:/usr/local/bundle
-      - rails-production-ruby-public-assets:/usr/local/app/src/server/public/assets
+      - jasonben_ide_bundle:/jasonben/ide/bundle
+      - src:/jasonben/ide/code/src
+      - rails-production-ruby-public-assets:/jasonben/ide/code/src/server/public/assets
     command: bundle exec puma -C config/puma.rb -p ${VIRTUAL_PORT} -b tcp://0.0.0.0
 
   rails-production-db:
@@ -93,14 +95,10 @@ services:
       - RAILS_ENV=production
       - RACK_ENV=production
       - RAILS_LOG_TO_STDOUT=enabled
-      - BUNDLE_MIRROR__HTTPS://RUBYGEMS__ORG/=${GEMSTASH_URL}
-      - BUNDLE_MIRROR__HTTPS://RUBYGEMS__ORG/__FALLBACK_TIMEOUT="10"
     restart: always
     networks:
       - rails-production
-    volumes:
-      - rails-production-ruby-gems:/usr/local/bundle
-    working_dir: /usr/local/app/src/server
+    working_dir: /jasonben/ide/code/src/server
     command: sh -c "bundle exec sidekiq"
 
   rails-production-redis-actioncable:
@@ -138,8 +136,8 @@ services:
       - rails-development
     <<: *base-development-image
     volumes:
-      - rails-app-src:/usr/local/app/src/server
-      - rails-development-ruby-gems:/usr/local/bundle
+      - jasonben_ide_bundle:/jasonben/ide/bundle
+      - src:/jasonben/ide/src
     depends_on:
       - rails-development-db
       - rails-development-redis-actioncable
@@ -152,8 +150,6 @@ services:
       - RAILS_ENV=development
       - RACK_ENV=development
       - RAILS_LOG_TO_STDOUT=enabled
-      - BUNDLE_MIRROR__HTTPS://RUBYGEMS__ORG/=${GEMSTASH_URL}
-      - BUNDLE_MIRROR__HTTPS://RUBYGEMS__ORG/__FALLBACK_TIMEOUT="10"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-rails-development-server.entrypoints=https"
@@ -163,11 +159,12 @@ services:
     networks:
       - public-web
       - rails-development
-    working_dir: /usr/local/app/src/server
+    working_dir: /jasonben/ide/code/src/server
     command: bundle exec puma -C config/puma.rb -p ${VIRTUAL_PORT:-3000} -b tcp://0.0.0.0
 
   rails-development-db: &rails-development-db
     profiles:
+      - ide
       - rails-development
     image: postgres:14.4-alpine3.16
     networks:
@@ -182,6 +179,7 @@ services:
   rails-test-db:
     profiles:
       - rails-development
+      - ide
     <<: *rails-development-db
     volumes:
       - rails-test-db-data:/var/lib/postgresql/data
@@ -195,6 +193,8 @@ services:
       - rails-development-redis-sidekiq
     networks:
       - rails-development
+    volumes:
+      - jasonben_ide_bundle:/jasonben/ide/bundle
     command: ["bundle", "exec", "sidekiq"]
 
   rails-development-redis-actioncable:
@@ -275,15 +275,15 @@ services:
     networks:
       - rails-production
     volumes:
-      - rails-production-ruby-gems:/usr/local/bundle
-      - rails-production-ruby-public-assets:/usr/local/app/src/server/public/assets
+      - rails-production-ruby-public-assets:/jasonben/ide/code/src/server/public/assets
     user: "root"
-    command: sh -c "chown -R ${IDE_USER}:${IDE_USER} /usr/local/app/src/server/public/assets && rails assets:precompile"
+    command: sh -c "chown -R ${IDE_USER}:${IDE_USER} /jasonben/ide/code/src/server/public/assets && bundle exec rails assets:precompile"
 
   ide: &ide
     profiles:
+      - ide
       - rails-development
-    <<: *base-development-image
+    <<: [*base-development-image]
     depends_on:
       - rails-development-db
       - rails-test-db
@@ -297,21 +297,23 @@ services:
       - rails-development
       - dockersock
     volumes:
-      - jasonben_ide_code:/jasonben/ide/code
+      - jasonben_ide_bundle:/jasonben/ide/bundle
+      - src:/jasonben/ide/code/src
       - solargraph-cache:/jasonben/ide/.solargraph
-      - rails-app-src:/jasonben/ide/code/server
-      - javascript-client-src:/jasonben/ide/code/client
-      - rails-development-ruby-gems:/jasonben/ide/bundle
     tty: true
-    working_dir: /jasonben/ide/code
+    working_dir: /jasonben/ide/code/src/server
     command: tmux new-session -A -s ide
 
+  rails-app-starter-src:
+    image: jasonben/rails-app-starter
+    volumes:
+      - src:/jasonben/ide/code/src
+    command: ["tail", "-f", "/dev/null"]
 
 volumes:
-  rails-app-src:
-  javascript-client-src:
-  rails-development-ruby-gems:
-  rails-production-ruby-gems:
+  src:
+    name: rails-app-starter
+    external: true
   rails-production-ruby-public-assets:
   rails-development-db-data:
   rails-test-db-data:
@@ -319,6 +321,8 @@ volumes:
   solargraph-cache:
     external: true
   jasonben_ide_code:
+    external: true
+  jasonben_ide_bundle:
     external: true
 
 networks:

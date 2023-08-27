@@ -41,7 +41,11 @@ WORKDIR ${APP_SRC}/server
 RUN \
   gem install bundler:2.4.19 && \
   bundle update && \
+  bundle config set --local deployment 'true' && \
   bundle install
 
 RUN \
-  bundle exec rails assets:precompile RAILS_ENV=production SECRET_KEY_BASE=railsappstarterrailsappstarterrailsappstarterrailsappstarter
+  bundle exec \
+    rails assets:precompile \
+      RAILS_ENV=production \
+      SECRET_KEY_BASE=railsappstarterrailsappstarterrailsappstarterrailsappstarter

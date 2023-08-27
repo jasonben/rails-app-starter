@@ -299,6 +299,9 @@ services:
     volumes:
       - jasonben_ide_code:/jasonben/ide/code
       - solargraph-cache:/jasonben/ide/.solargraph
+      - rails-app-src:/jasonben/ide/code/server
+      - javascript-client-src:/jasonben/ide/code/client
+      - rails-development-ruby-gems:/jasonben/ide/bundle
     tty: true
     working_dir: /jasonben/ide/code
     command: tmux new-session -A -s ide
@@ -317,7 +320,6 @@ volumes:
     external: true
   jasonben_ide_code:
     external: true
-
 
 networks:
   dockersock:

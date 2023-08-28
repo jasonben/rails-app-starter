@@ -2,9 +2,9 @@
 
 down() {
   dc="docker compose --profile"
-  $dc rails-production down
-  $dc rails-development down
-  $dc ide down
+  $dc rails-production down -v
+  $dc rails-development down -v
+  $dc ide down -v
 }
 
 down 2>/dev/null

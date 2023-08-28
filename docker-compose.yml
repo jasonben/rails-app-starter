@@ -9,9 +9,31 @@ x-production-env: &rails-production-env
     - REDIS_URL=redis://rails-production-redis-actioncable:6379/1
     - SECRET_KEY_BASE
     - VIRTUAL_HOST
+    - VIRTUAL_PORT
 
-x-rails-server-src: &rails-server-src
+x-development-env: &rails-development-env
+  env_file:
+    - .env
+  environment:
+    - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@rails-development-db
+    - RACK_ENV=development
+    - RAILS_ENV=development
+    - RAILS_LOG_TO_STDOUT=enabled
+    - REDIS_URL=redis://rails-development-redis:6379/1
+    - SECRET_KEY_BASE
+    - VIRTUAL_HOST
+    - VIRTUAL_PORT
+
+x-javascript-development-server-env: &javascript-development-server-env
+  environment:
+    - HOST=0.0.0.0
+    - PORT=${VIRTUAL_PORT}
+    - REACT_APP_API_URL=https://dev-api-${VIRTUAL_HOST}
+    - WDS_SOCKET_PORT=443
+
+x-rails-server-src-volumes: &rails-server-src-volumes
   volumes:
+    - jasonben_ide_bundle:/jasonben/ide/bundle
     - src:/jasonben/ide/code/src
   working_dir: /jasonben/ide/code/src/server
 
@@ -36,7 +58,7 @@ x-rails-production-image: &rails-production-image
     dockerfile: Dockerfile
   image: jasonben/rails-app-starter
 
-x-rails-production-run: &rails-production-run
+x-rails-production-image-with-env: &rails-production-image-with-env
   <<: [*rails-production-image, *rails-production-env]
   working_dir: /jasonben/ide/code/src/server
 
@@ -44,7 +66,7 @@ services:
   rails-production-server:
     profiles:
       - rails-production
-    <<: *rails-production-run
+    <<: [*rails-server-src-volumes, *rails-production-image-with-env]
     restart: always
     labels:
       - "traefik.enable=true"
@@ -57,12 +79,7 @@ services:
       - rails-production
     depends_on:
       - rails-production-db
-      # - rails-production-redis-actioncable
-    working_dir: /jasonben/ide/code/src/server
-    volumes:
-      - jasonben_ide_bundle:/jasonben/ide/bundle
-      - src:/jasonben/ide/code/src
-      - rails-production-ruby-public-assets:/jasonben/ide/code/src/server/public/assets
+      - rails-production-redis-actioncable
     command: bundle exec puma -C config/puma.rb -p ${VIRTUAL_PORT} -b tcp://0.0.0.0
 
   rails-production-db:
@@ -134,23 +151,10 @@ services:
   rails-development-server:
     profiles:
       - rails-development
-    <<: *base-development-image
-    volumes:
-      - jasonben_ide_bundle:/jasonben/ide/bundle
-      - src:/jasonben/ide/code/src
+    <<: [*base-development-image, *rails-development-env, *rails-server-src-volumes]
     depends_on:
       - rails-development-db
       - rails-development-redis-actioncable
-    env_file:
-      - .env
-    environment:
-      - VIRTUAL_HOST
-      - VIRTUAL_PORT
-      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@rails-development-db
-      - REDIS_URL=redis://rails-development-redis:6379/1
-      - RAILS_ENV=development
-      - RACK_ENV=development
-      - RAILS_LOG_TO_STDOUT=enabled
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-rails-development-server.entrypoints=https"
@@ -160,8 +164,7 @@ services:
     networks:
       - public-web
       - rails-development
-    working_dir: /jasonben/ide/code/src/server
-    command: "bundle exec puma -C config/puma.rb -p ${VIRTUAL_PORT} -b tcp://0.0.0.0"
+    command: bundle exec puma -C config/puma.rb -p "${VIRTUAL_PORT}" -b tcp://0.0.0.0
 
   rails-development-db: &rails-development-db
     profiles:
@@ -215,7 +218,7 @@ services:
   javascript-development-server:
     profiles:
       - javascript-development
-    <<: [*base-development-image, *javascript-client-src]
+    <<: [*base-development-image, *javascript-client-src, *javascript-development-server-env]
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-javascript-development-server.entrypoints=https"
@@ -224,11 +227,6 @@ services:
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-javascript-development-server.rule=Host(`dev-${VIRTUAL_HOST}`)"
     networks:
       - public-web
-    environment:
-      - HOST=0.0.0.0
-      - PORT=${VIRTUAL_PORT}
-      - REACT_APP_API_URL=https://dev-api-${VIRTUAL_HOST}
-      - WDS_SOCKET_PORT=443
     command: yarn start
 
   yarn:
@@ -239,14 +237,14 @@ services:
       - yarn
 
   create-rails-app:
-    <<: [*base-development-image, *rails-server-src]
+    <<: [*base-development-image, *rails-server-src-volumes]
     tty: true
     profiles:
       - init
     command: sh -c "gem install rails && rails new -d postgresql --skip-git --skip-bundle ."
 
   jumpstart-rails:
-    <<: [*base-development-image, *rails-server-src]
+    <<: [*base-development-image, *rails-server-src-volumes]
     tty: true
     environment:
       - SKIP_GIT=1
@@ -269,21 +267,22 @@ services:
       - REACT_APP_API_URL=https://api-${VIRTUAL_HOST}
     command: yarn run build
 
-  rails-production-assets-precompile:
-    profiles:
-      - rails-production
-    <<: *rails-production-run
-    networks:
-      - rails-production
-    volumes:
-      - rails-production-ruby-public-assets:/jasonben/ide/code/src/server/public/assets
-    user: "root"
-    command: sh -c "chown -R ${IDE_USER}:${IDE_USER} /jasonben/ide/code/src/server/public/assets && bundle exec rails assets:precompile"
+  # rails-production-assets-precompile:
+  #   profiles:
+  #     - rails-production
+  #   <<: *rails-production-image-with-env
+  #   networks:
+  #     - rails-production
+  #   volumes:
+  #     - rails-production-ruby-public-assets:/jasonben/ide/code/src/server/public/assets
+  #   user: "root"
+  #   command: sh -c "chown -R ${IDE_USER}:${IDE_USER} /jasonben/ide/code/src/server/public/assets && bundle exec rails assets:precompile"
 
   ide: &ide
     profiles:
       - ide
       - rails-development
+    tty: true
     <<: [*base-development-image]
     depends_on:
       - rails-development-db
@@ -301,7 +300,6 @@ services:
       - jasonben_ide_bundle:/jasonben/ide/bundle
       - src:/jasonben/ide/code/src
       - solargraph-cache:/jasonben/ide/.solargraph
-    tty: true
     working_dir: /jasonben/ide/code/src/server
     command: tmux new-session -A -s ide
 
@@ -309,6 +307,7 @@ services:
     image: jasonben/rails-app-starter
     volumes:
       - src:/jasonben/ide/code/src
+    working_dir: /jasonben/ide/code/src/server
     command: ["tail", "-f", "/dev/null"]
 
 volumes:
@@ -320,8 +319,6 @@ volumes:
   rails-test-db-data:
   rails-production-db-data:
   solargraph-cache:
-    external: true
-  jasonben_ide_code:
     external: true
   jasonben_ide_bundle:
     external: true

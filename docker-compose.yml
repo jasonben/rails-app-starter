@@ -7,6 +7,7 @@ x-production-env: &rails-production-env
     - RAILS_ENV=production
     - RAILS_LOG_TO_STDOUT=enabled
     - REDIS_URL=redis://rails-production-redis-actioncable:6379/1
+    - REDIS_URL_2=redis://rails-production-redis-sidekiq:6379/1
     - SECRET_KEY_BASE
     - VIRTUAL_HOST
     - VIRTUAL_PORT
@@ -19,7 +20,8 @@ x-development-env: &rails-development-env
     - RACK_ENV=development
     - RAILS_ENV=development
     - RAILS_LOG_TO_STDOUT=enabled
-    - REDIS_URL=redis://rails-development-redis:6379/1
+    - REDIS_URL=redis://rails-development-redis-actioncable:6379/1
+    - REDIS_URL_2=redis://rails-development-redis-sidekiq:6379/1
     - SECRET_KEY_BASE
     - VIRTUAL_HOST
     - VIRTUAL_PORT
